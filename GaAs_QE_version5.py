@@ -604,7 +604,7 @@ def electron_impurity_transfer_energy(dist_2D, Rate, stept):
     P_ind = np.random.uniform(0, 1, Num) <= P
     energy_ind = dist_2D[:, 5] > 0
     happen = P_ind * energy_ind
-    E_loss = np.random.uniform(0, dist_2D[:, 5]).clip(0) * happen
+    # E_loss = np.random.uniform(0, dist_2D[:, 5]).clip(0) * happen
     # dist_2D[:, 5] = dist_2D[:, 5] - E_loss
     return dist_2D, happen
 
