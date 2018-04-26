@@ -65,7 +65,7 @@ thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 100e-12  # s
+total_time = 10e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -256,7 +256,8 @@ def electron_distribution(hw, types):
     vz = velocity * np.cos(theta)
     vy = velocity * np.sin(theta) * np.sin(phi)
     vx = velocity * np.sin(theta) * np.cos(phi)
-    distribution_2D = np.vstack((phi, theta, vx, vy, vz, energy, velocity, x_pos, y_pos, z_pos)).T
+    distribution_2D = np.vstack(
+        (phi, theta, vx, vy, vz, energy, velocity, x_pos, y_pos, z_pos)).T
     return distribution_2D
 
 
@@ -727,11 +728,11 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
     v_zp = dist[:, 6] * np.cos(theta) * happen + \
         dist[:, 4] * (~happen)
     dist[:, 2] = dist[:, 2] * (~happen) + happen * \
-        (v_xp * np.cos(phi0) * np.cos(theta0) - \
-        v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
+        (v_xp * np.cos(phi0) * np.cos(theta0) -
+         v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
     dist[:, 3] = dist[:, 3] * (~happen) + happen * \
-        (v_xp * np.sin(phi0) * np.cos(theta0) + \
-        v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0))
+        (v_xp * np.sin(phi0) * np.cos(theta0) +
+         v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0))
     dist[:, 4] = dist[:, 4] * (~happen) + \
         (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
 
@@ -821,11 +822,11 @@ def renew_coulomb_distribution(dist_2D, happen, types):
     v_zp = dist_2D[:, 6] * np.cos(theta) * happen + \
         dist_2D[:, 4] * (~happen)
     dist_2D[:, 2] = dist_2D[:, 2] * (~happen) + happen * \
-        (v_xp * np.cos(phi0) * np.cos(theta0) - \
-        v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
+        (v_xp * np.cos(phi0) * np.cos(theta0) -
+         v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
     dist_2D[:, 3] = dist_2D[:, 3] * (~happen) + happen * \
-        (v_xp * np.sin(phi0) * np.cos(theta0) + \
-        v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0))
+        (v_xp * np.sin(phi0) * np.cos(theta0) +
+         v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0))
     dist_2D[:, 4] = dist_2D[:, 4] * (~happen) + \
         (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
 
@@ -1292,12 +1293,13 @@ def electron_transport(distribution_2D, types):
             else:
                 energy_X = np.array([])
             # print('after:', np.mean(dist_2D[:, 5]))
-            total_energy = np.concatenate((dist_2D[:, 5], energy_L, energy_X), axis=0)
+            total_energy = np.concatenate(
+                (dist_2D[:, 5], energy_L, energy_X), axis=0)
             time_data.append([t * 10**12, np.mean(total_energy) * 10**3,
                               len(surface_2D), len(dist_2D), len(dist_L),
                               len(dist_X)])
             # print('surface:', len(surface_2D), 'trap:', len(trap_2D),
-            #      'back:', len(back_2D), 
+            #      'back:', len(back_2D),
             #      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)))
             # print(np.mean(dist_2D[:, 5]), len(dist_2D))
             if (len(dist_2D)) <= 10:
@@ -1364,9 +1366,6 @@ def surface_electron_transmission(surface_2D, func_tp):
     theta = surface_2D[:, 1]
     E_trans = np.abs(surface_2D[:, 5] * np.sin(theta)**2)
     E_paral = np.abs(surface_2D[:, 5] * np.cos(theta)**2)
-    E_t1 = 0.5 * m_T * (surface_2D[:, 2]**2 + surface_2D[:, 3]**2) / ec
-    E_p1 = 0.5 * m_T * surface_2D[:, 4]**2 / ec
-    print(E_trans, E_t1, E_paral, E_p1)
     # P_tp1 = func_tp(surface_2D[:, 5], 0.0)
     # print(P_tp1)
     for i in range(Num):
@@ -1406,12 +1405,12 @@ def transmission_function1(E_paral, E_trans):
     V2 = V0 - F * w1 - Q / x2
     x = np.concatenate((x1, x2), axis=0)
     V = np.concatenate((V1, V2), axis=0)
-    
+
     fig, ax = plt.subplots()
     ax.plot(x, V)
     plt.savefig('surface_barrier.pdf', format='pdf')
     plt.show()
-    
+
     Tp = 1
     E_in_par = E_paral + E_trans - E_trans * m_T / m_e
     E_out_par = E_paral + E_trans - E_trans * m_T / m_e - E_A
@@ -1450,11 +1449,11 @@ def transmission_function1(E_paral, E_trans):
 
 
 def transmission_function(E_paral, E_trans):
-    
+
     V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
                   0.06, 0.04, 0.02])
-    V = np.array([0.28]*100)
+    V = np.array([0.28] * 100)
     # V = V + E_B
     width = 8e-10  # m, width of barrier
     num = 100
@@ -1567,7 +1566,8 @@ def plot_QE(filename, data):
 def plot_time_data(filename, time_data):
     np.savetxt(filename + '.csv', time_data, delimiter=',', fmt='%.6f')
     fig1, ax1 = plt.subplots()
-    l1 = ax1.plot(time_data[:, 0], time_data[:, 1], 'bp', label='Electron energy')
+    l1 = ax1.plot(time_data[:, 0], time_data[:, 1],
+                  'bp', label='Electron energy')
     ax1.set_xlabel('Time (ps)', fontsize=14)
     ax1.set_ylabel('Energy (meV)', fontsize=14, color='b')
     ax1.tick_params('y', color='b')
@@ -1746,7 +1746,7 @@ def plot_surface_emission_probability(E_paral, Tp, func_tp):
     plt.show()
 
 
-def plot_electron_distribution(filename,dist_2D, types):
+def plot_electron_distribution(filename, dist_2D, types):
     if types == 1:
         fig, ax = plt.subplots()
         ax.hist(dist_2D[:, 5], bins=100, color='k')
