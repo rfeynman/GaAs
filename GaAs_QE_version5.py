@@ -603,7 +603,7 @@ def electron_impurity_transfer_energy(dist_2D, Rate, stept):
     P_ind = np.random.uniform(0, 1, Num) <= P
     energy_ind = dist_2D[:, 5] > 0
     happen = P_ind * energy_ind
-    E_loss = np.random.uniform(0, dist_2D[:, 5]).clip(0) * happen
+    # E_loss = np.random.uniform(0, dist_2D[:, 5]).clip(0) * happen
     # dist_2D[:, 5] = dist_2D[:, 5] - E_loss
     return dist_2D, happen
 
@@ -617,14 +617,14 @@ def electron_hole_transfer_energy(dist_2D, hole_energy, Rate, stept):
     P_eh_ind = random_P_eh <= P_eh
     energy_eh_ind = dist_2D[:, 5] > 0
     happen = P_eh_ind * energy_eh_ind
-    E_h = np.mean(hole_energy)
+    # E_h = np.mean(hole_energy)
     E_h = np.resize(hole_energy, Num)
     eh_loss = np.random.uniform(0, dist_2D[:, 5] - E_h) * happen
     dist_2D[:, 5] = dist_2D[:, 5] - eh_loss
     # hole_energy = hole_energy + np.mean(eh_loss)
     # hole_energy = np.abs(hole_energy)
     # print(np.mean(dist_2D[:, 5]), np.mean(hole_energy))
-    return dist_2D, hole_energy, happen
+    return dist_2D, happen
 
 
 def electron_acoustic_tranfer_energy(dist_2D, Rate, stept):
@@ -1013,8 +1013,7 @@ def electron_transport(distribution_2D, types):
 
                 # ----- e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_2D[:, 5], 1)
-                dist_2D, hole_energy, happen_eh = \
-                    electron_hole_transfer_energy(
+                dist_2D, happen_eh = electron_hole_transfer_energy(
                         dist_2D, hole_energy, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_2D = renew_coulomb_distribution(dist_2D, happen_eh, 1)
@@ -1078,7 +1077,7 @@ def electron_transport(distribution_2D, types):
 
                 # ----- b. e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_L[:, 5], 2)
-                dist_L, hole_energy, happen_eh = electron_hole_transfer_energy(
+                dist_L, happen_eh = electron_hole_transfer_energy(
                     dist_L, hole_energy, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_L = renew_coulomb_distribution(dist_L, happen_eh, 2)
@@ -1161,7 +1160,7 @@ def electron_transport(distribution_2D, types):
 
                 # ----- e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_X[:, 5], 3)
-                dist_X, hole_energy, happen_eh = electron_hole_transfer_energy(
+                dist_X, happen_eh = electron_hole_transfer_energy(
                     dist_X, hole_energy, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_X = renew_coulomb_distribution(dist_X, happen_eh, 3)
@@ -1786,7 +1785,7 @@ def main(opt):
     if opt == 1:  # for test
         dist_2D = electron_distribution(hw_test, 2)
         print('excited electron ratio: ', len(dist_2D) / Ni)
-        #plot_electron_distribution('initial', dist_2D, 1)
+        # plot_electron_distribution('initial', dist_2D, 1)
 
         surface_2D, back_2D, trap_2D, dist_2D, time_data = \
             electron_transport(dist_2D, 1)
@@ -1845,4 +1844,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(1)
+    main(3)
