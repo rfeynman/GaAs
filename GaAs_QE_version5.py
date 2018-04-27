@@ -65,7 +65,7 @@ thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 10e-12  # s
+total_time = 100e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -609,23 +609,20 @@ def electron_impurity_transfer_energy(dist_2D, Rate, stept):
     return dist_2D, happen
 
 
-def electron_hole_transfer_energy(dist_2D, hole_energy, Rate, stept):
+def electron_hole_transfer_energy(dist_2D, Rate, stept):
     Num = len(dist_2D)
-    # hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Num)
-    # hole_energy1 = m_h * hole_velocity**2 / 2 / ec
+    # assuming holes are steady state of maxwell-boltzmann distribution
+    # hole temperature T_h = T = 298 K
+    hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Num)
+    E_h = m_h * hole_velocity**2 / 2 / ec
     P_eh = stept * Rate
     random_P_eh = np.random.uniform(0, 1, Num)
     P_eh_ind = random_P_eh <= P_eh
     energy_eh_ind = dist_2D[:, 5] > 0
     happen = P_eh_ind * energy_eh_ind
-    E_h = np.mean(hole_energy)
-    E_h = np.resize(hole_energy, Num)
-    eh_loss = np.random.uniform(0, dist_2D[:, 5] - E_h) * happen
+    eh_loss = np.random.uniform(0, dist_2D[:, 5] - E_h).clip(0) * happen
     dist_2D[:, 5] = dist_2D[:, 5] - eh_loss
-    # hole_energy = hole_energy + np.mean(eh_loss)
-    # hole_energy = np.abs(hole_energy)
-    # print(np.mean(dist_2D[:, 5]), np.mean(hole_energy))
-    return dist_2D, hole_energy, happen
+    return dist_2D, happen
 
 
 def electron_acoustic_tranfer_energy(dist_2D, Rate, stept):
@@ -727,9 +724,9 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         dist[:, 3] * (~happen)
     v_zp = dist[:, 6] * np.cos(theta) * happen + \
         dist[:, 4] * (~happen)
-    dist[:, 2] = dist[:, 2] * (~happen) + happen * \
-        (v_xp * np.cos(phi0) * np.cos(theta0) -
-         v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
+    dist[:, 2] = dist[:, 2] * (~happen) + \
+        happen * (v_xp * np.cos(phi0) * np.cos(theta0) -
+                  v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
     dist[:, 3] = dist[:, 3] * (~happen) + happen * \
         (v_xp * np.sin(phi0) * np.cos(theta0) +
          v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0))
@@ -737,8 +734,10 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
 
     zero_v_ind = dist[:, 6] == 0
-    dist[zero_v_ind, 6] = 0.0001
+    dist[zero_v_ind, 6] = 1
     theta1 = np.arccos(dist[:, 4] / dist[:, 6])
+    zero_theta_ind = np.sin(theta1) == 0
+    theta1[zero_theta_ind] = pi / 2
     phi1 = np.arccos(dist[:, 2] / dist[:, 6] / np.sin(theta1))
     dist[:, 0] = phi1 * happen + dist[:, 0] * (~happen)
     dist[:, 1] = theta1 * happen + dist[:, 1] * (~happen)
@@ -833,6 +832,8 @@ def renew_coulomb_distribution(dist_2D, happen, types):
     zero_v_ind = dist_2D[:, 6] == 0
     dist_2D[zero_v_ind, 6] = 0.0001
     theta1 = np.arccos(dist_2D[:, 4] / dist_2D[:, 6])
+    zero_theta_ind = np.sin(theta1) == 0
+    theta1[zero_theta_ind] = pi / 2
     phi1 = np.arccos(dist_2D[:, 2] / dist_2D[:, 6] / np.sin(theta1))
     dist_2D[:, 0] = phi1 * happen + dist_2D[:, 0] * (~happen)
     dist_2D[:, 1] = theta1 * happen + dist_2D[:, 1] * (~happen)
@@ -908,10 +909,6 @@ def electron_transport(distribution_2D, types):
         dist_XtoT = []
         dist_XtoL = []
         t = 0
-        # assuming holes are steady state of maxwell-boltzmann distribution
-        # hole temperature T_h = T = 298 K
-        hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), len(dist_2D))
-        hole_energy = m_h * hole_velocity**2 / 2 / ec
         time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3,
                           0, len(dist_2D), 0, 0])
         while t < total_time:
@@ -986,7 +983,7 @@ def electron_transport(distribution_2D, types):
                 max_Rate_X = 0
 
             Rate = np.max([max_Rate_T, max_Rate_L, max_Rate_X])
-            stept = 1 / Rate / 25
+            stept = 1 / Rate / 10
             t += stept
             # transfer matrix after stept
             M_st = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -1014,9 +1011,8 @@ def electron_transport(distribution_2D, types):
 
                 # ----- e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_2D[:, 5], 1)
-                dist_2D, hole_energy, happen_eh = \
-                    electron_hole_transfer_energy(
-                        dist_2D, hole_energy, Rate_eh, stept)
+                dist_2D, happen_eh = electron_hole_transfer_energy(
+                    dist_2D, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_2D = renew_coulomb_distribution(dist_2D, happen_eh, 1)
 
@@ -1079,8 +1075,8 @@ def electron_transport(distribution_2D, types):
 
                 # ----- b. e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_L[:, 5], 2)
-                dist_L, hole_energy, happen_eh = electron_hole_transfer_energy(
-                    dist_L, hole_energy, Rate_eh, stept)
+                dist_L, happen_eh = electron_hole_transfer_energy(
+                    dist_L, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_L = renew_coulomb_distribution(dist_L, happen_eh, 2)
 
@@ -1162,8 +1158,8 @@ def electron_transport(distribution_2D, types):
 
                 # ----- e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_X[:, 5], 3)
-                dist_X, hole_energy, happen_eh = electron_hole_transfer_energy(
-                    dist_X, hole_energy, Rate_eh, stept)
+                dist_X, happen_eh = electron_hole_transfer_energy(
+                    dist_X, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_X = renew_coulomb_distribution(dist_X, happen_eh, 3)
 
@@ -1299,8 +1295,8 @@ def electron_transport(distribution_2D, types):
             time_data.append([t * 10**12, np.mean(total_energy) * 10**3,
                               len(surface_2D), len(dist_2D), len(dist_L),
                               len(dist_X)])
-            # print('surface:', len(surface_2D), 'trap:', len(trap_2D),
-            #      'back:', len(back_2D),
+            # print('time:', t * 1e12, 'surface:', len(surface_2D),
+            #      'trap:', len(trap_2D), 'back:', len(back_2D),
             #      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)))
             # print(np.mean(dist_2D[:, 5]), len(dist_2D))
             if (len(dist_2D)) <= 10:
@@ -1350,7 +1346,7 @@ def filter(dist_2D):
     back = dist_2D[:, 9] >= thick
     front = dist_2D[:, 9] <= surface
     # trap = dist_2D[:, 5] <= min(E_A - E_sch, 0.0005)
-    trap = dist_2D[:, 5] <= 0.0005
+    trap = dist_2D[:, 5] <= 0.001
 
     back_dist = dist_2D[back, :]
     front_dist = dist_2D[front & (~trap), :]
@@ -1367,6 +1363,9 @@ def surface_electron_transmission(surface_2D, func_tp):
     theta = surface_2D[:, 1]
     E_trans = np.abs(surface_2D[:, 5] * np.sin(theta)**2)
     E_paral = np.abs(surface_2D[:, 5] * np.cos(theta)**2)
+    # E_t1 = 0.5 * m_T * (surface_2D[:, 2]**2 + surface_2D[:, 3]**2) / ec
+    # E_p1 = 0.5 * m_T * surface_2D[:, 4]**2 / ec
+    # print(E_trans, E_t1 * 1e-18, E_paral, E_p1 * 1e-18)
     # P_tp1 = func_tp(surface_2D[:, 5], 0.0)
     # print(P_tp1)
     for i in range(Num):
@@ -1584,7 +1583,7 @@ def plot_time_data(filename, time_data):
     ax1.tick_params('both', direction='in', labelsize=12)
     ln = l1 + l2 + l3 + l4 + l5
     labs = [l.get_label() for l in ln]
-    ax1.legend(ln, labs, loc='best', frameon=False, fontsize=12)
+    ax1.legend(ln, labs, loc='center', frameon=False, fontsize=12)
     fig1.tight_layout()
     plt.savefig(filename + '.pdf', format='pdf')
     plt.show()
@@ -1845,4 +1844,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(1)
+    main(2)
