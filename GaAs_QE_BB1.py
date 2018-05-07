@@ -1910,21 +1910,13 @@ def main(opt):
             dist_2D = electron_distribution(hw, 2)
             print('excited electron ratio: ', len(dist_2D) / Ni)
 
-            surface_2D, back_2D, trap_2D, dist_2D, energy_time = \
+            emiss_2D, back_2D, trap_2D, dist_2D, energy_time = \
                 electron_transport_emission(dist_2D, 1, func_tp)
-            print('surface electron ratio: ', len(surface_2D) / Ni)
-
-            # emiss_2D, surf_trap = electron_emitting(surface_2D)
-            emiss_2D, surf_trap = surface_electron_transmission(
-                surface_2D, func_tp)
 
             SR = surface_reflection(hw)  # surface light reflection
-            TE = len(surface_2D) / len(dist_2D)  # transportation efficiency
-            SE = len(surface_2D) / Ni * (1 - SR)
-            ER = len(emiss_2D) / len(surface_2D)  # surface emission rate
             QE = 100.0 * len(emiss_2D) / Ni * (1 - SR)
             print('photon energy (eV): ', hw, ', QE (%): ', QE)
-            data.append([hw, QE, SR, TE, SE, ER])
+            data.append([hw, QE, SR])
 
         filename = 'QE_' + str(thick) + '_' + str(E_A)
         data = np.array(data)
@@ -1945,4 +1937,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(2)
+    main(1)
