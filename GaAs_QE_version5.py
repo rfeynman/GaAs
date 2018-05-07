@@ -54,10 +54,10 @@ DEg = 3 * ec / 16 / pi / eps * np.sqrt(ec**2 * N_A / eps / kB / T)
 Eg = Eg - DEg
 Eg = float('%.2f' % Eg)
 DE = 0.34  # eV, split-off energy gap
-# E_B = Eg / 3  # only for NA = 10**19 cm**-3
+E_B = Eg / 3  # only for NA = 10**19 cm**-3
 EB_data = np.genfromtxt('GaAs_Band_Bending.csv', delimiter=',')
 func0 = interp1d(EB_data[:, 0] * 1e6, EB_data[:, 1])
-E_B = func0(N_A)
+# E_B = func0(N_A)
 W_B = np.sqrt(2 * eps * E_B / ec / N_A) * 10**9  # nm
 # print(Eg, E_B, W_B, DEg, E_T)
 E_A = 0.01  # eV, electron affinity
@@ -65,7 +65,7 @@ thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 10e-12  # s
+total_time = 200e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -209,7 +209,7 @@ def electron_distribution(hw, types):
         plt.savefig('DOS.pdf', format='pdf')
         plt.show()'''
         E0 = Eg
-        N = 105
+        N = 127
         delta_E = (hw - E0) / N
         norm, err = integrate.quad(lambda e: func1(e - hw) * func1(e), E0, hw,
                                    limit=10000)
@@ -609,22 +609,19 @@ def electron_impurity_transfer_energy(dist_2D, Rate, stept):
     return dist_2D, happen
 
 
-def electron_hole_transfer_energy(dist_2D, hole_energy, Rate, stept):
+def electron_hole_transfer_energy(dist_2D, Rate, stept):
     Num = len(dist_2D)
-    # hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Num)
-    # hole_energy1 = m_h * hole_velocity**2 / 2 / ec
+    # assuming holes are steady state of maxwell-boltzmann distribution
+    # hole temperature T_h = T = 298 K
+    hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), Num)
+    E_h = m_h * hole_velocity**2 / 2 / ec
     P_eh = stept * Rate
     random_P_eh = np.random.uniform(0, 1, Num)
     P_eh_ind = random_P_eh <= P_eh
     energy_eh_ind = dist_2D[:, 5] > 0
     happen = P_eh_ind * energy_eh_ind
-    # E_h = np.mean(hole_energy)
-    E_h = np.resize(hole_energy, Num)
-    eh_loss = np.random.uniform(0, dist_2D[:, 5] - E_h) * happen
+    eh_loss = np.random.uniform(0, dist_2D[:, 5] - E_h).clip(0) * happen
     dist_2D[:, 5] = dist_2D[:, 5] - eh_loss
-    # hole_energy = hole_energy + np.mean(eh_loss)
-    # hole_energy = np.abs(hole_energy)
-    # print(np.mean(dist_2D[:, 5]), np.mean(hole_energy))
     return dist_2D, happen
 
 
@@ -727,9 +724,9 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         dist[:, 3] * (~happen)
     v_zp = dist[:, 6] * np.cos(theta) * happen + \
         dist[:, 4] * (~happen)
-    dist[:, 2] = dist[:, 2] * (~happen) + happen * \
-        (v_xp * np.cos(phi0) * np.cos(theta0) -
-         v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
+    dist[:, 2] = dist[:, 2] * (~happen) + \
+        happen * (v_xp * np.cos(phi0) * np.cos(theta0) -
+                  v_yp * np.sin(phi0) + v_zp * np.cos(phi0) * np.sin(theta0))
     dist[:, 3] = dist[:, 3] * (~happen) + happen * \
         (v_xp * np.sin(phi0) * np.cos(theta0) +
          v_yp * np.cos(phi0) + v_zp * np.sin(phi0) * np.sin(theta0))
@@ -737,9 +734,13 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
 
     zero_v_ind = dist[:, 6] == 0
-    dist[zero_v_ind, 6] = 0.0001
-    theta1 = np.arccos(dist[:, 4] / dist[:, 6])
-    phi1 = np.arccos(dist[:, 2] / dist[:, 6] / np.sin(theta1))
+    dist[zero_v_ind, 6] = 1
+    vz_v = np.clip((dist[:, 4] / dist[:, 6]), -1, 1)
+    theta1 = np.arccos(vz_v)
+    zero_theta_ind = np.sin(theta1) == 0
+    theta1[zero_theta_ind] = pi / 2
+    vx_vxy = np.clip((dist[:, 2] / dist[:, 6] / np.sin(theta1)), -1, 1)
+    phi1 = np.arccos(vx_vxy)
     dist[:, 0] = phi1 * happen + dist[:, 0] * (~happen)
     dist[:, 1] = theta1 * happen + dist[:, 1] * (~happen)
     return dist
@@ -832,8 +833,12 @@ def renew_coulomb_distribution(dist_2D, happen, types):
 
     zero_v_ind = dist_2D[:, 6] == 0
     dist_2D[zero_v_ind, 6] = 0.0001
-    theta1 = np.arccos(dist_2D[:, 4] / dist_2D[:, 6])
-    phi1 = np.arccos(dist_2D[:, 2] / dist_2D[:, 6] / np.sin(theta1))
+    vz_v = np.clip((dist_2D[:, 4] / dist_2D[:, 6]), -1, 1)
+    theta1 = np.arccos(vz_v)
+    zero_theta_ind = np.sin(theta1) == 0
+    theta1[zero_theta_ind] = pi / 2
+    vx_vxy = np.clip((dist_2D[:, 2] / dist_2D[:, 6] / np.sin(theta1)), -1, 1)
+    phi1 = np.arccos(vx_vxy)
     dist_2D[:, 0] = phi1 * happen + dist_2D[:, 0] * (~happen)
     dist_2D[:, 1] = theta1 * happen + dist_2D[:, 1] * (~happen)
     return dist_2D
@@ -908,10 +913,6 @@ def electron_transport(distribution_2D, types):
         dist_XtoT = []
         dist_XtoL = []
         t = 0
-        # assuming holes are steady state of maxwell-boltzmann distribution
-        # hole temperature T_h = T = 298 K
-        hole_velocity = maxwell.rvs(0, np.sqrt(kB * T / m_h), len(dist_2D))
-        hole_energy = m_h * hole_velocity**2 / 2 / ec
         time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3,
                           0, len(dist_2D), 0, 0])
         while t < total_time:
@@ -986,7 +987,7 @@ def electron_transport(distribution_2D, types):
                 max_Rate_X = 0
 
             Rate = np.max([max_Rate_T, max_Rate_L, max_Rate_X])
-            stept = 1 / Rate / 25
+            stept = 1 / Rate / 10
             t += stept
             # transfer matrix after stept
             M_st = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -1015,7 +1016,7 @@ def electron_transport(distribution_2D, types):
                 # ----- e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_2D[:, 5], 1)
                 dist_2D, happen_eh = electron_hole_transfer_energy(
-                        dist_2D, hole_energy, Rate_eh, stept)
+                    dist_2D, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_2D = renew_coulomb_distribution(dist_2D, happen_eh, 1)
 
@@ -1079,7 +1080,7 @@ def electron_transport(distribution_2D, types):
                 # ----- b. e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_L[:, 5], 2)
                 dist_L, happen_eh = electron_hole_transfer_energy(
-                    dist_L, hole_energy, Rate_eh, stept)
+                    dist_L, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_L = renew_coulomb_distribution(dist_L, happen_eh, 2)
 
@@ -1162,7 +1163,7 @@ def electron_transport(distribution_2D, types):
                 # ----- e-h scattering -----
                 Rate_eh = electron_hole_scattering(dist_X[:, 5], 3)
                 dist_X, happen_eh = electron_hole_transfer_energy(
-                    dist_X, hole_energy, Rate_eh, stept)
+                    dist_X, Rate_eh, stept)
                 if np.mean(happen_eh.astype(int)) > 0:
                     dist_X = renew_coulomb_distribution(dist_X, happen_eh, 3)
 
@@ -1298,10 +1299,10 @@ def electron_transport(distribution_2D, types):
             time_data.append([t * 10**12, np.mean(total_energy) * 10**3,
                               len(surface_2D), len(dist_2D), len(dist_L),
                               len(dist_X)])
-            # print('surface:', len(surface_2D), 'trap:', len(trap_2D),
-            #      'back:', len(back_2D),
-            #      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)))
-            # print(np.mean(dist_2D[:, 5]), len(dist_2D))
+            # print('time:', t * 1e12, 'surface:', len(surface_2D),
+            #      'trap:', len(trap_2D), 'back:', len(back_2D),
+            #      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)),
+            #      'vz:', np.mean(dist_2D[:, 4]))
             if (len(dist_2D)) <= 10:
                 break
         '''
@@ -1349,7 +1350,7 @@ def filter(dist_2D):
     back = dist_2D[:, 9] >= thick
     front = dist_2D[:, 9] <= surface
     # trap = dist_2D[:, 5] <= min(E_A - E_sch, 0.0005)
-    trap = dist_2D[:, 5] <= 0.0005
+    trap = dist_2D[:, 5] <= 0.0006
 
     back_dist = dist_2D[back, :]
     front_dist = dist_2D[front & (~trap), :]
@@ -1366,6 +1367,9 @@ def surface_electron_transmission(surface_2D, func_tp):
     theta = surface_2D[:, 1]
     E_trans = np.abs(surface_2D[:, 5] * np.sin(theta)**2)
     E_paral = np.abs(surface_2D[:, 5] * np.cos(theta)**2)
+    # E_t1 = 0.5 * m_T * (surface_2D[:, 2]**2 + surface_2D[:, 3]**2) / ec
+    # E_p1 = 0.5 * m_T * surface_2D[:, 4]**2 / ec
+    # print(E_trans, E_t1 * 1e-18, E_paral, E_p1 * 1e-18)
     # P_tp1 = func_tp(surface_2D[:, 5], 0.0)
     # print(P_tp1)
     for i in range(Num):
@@ -1381,71 +1385,31 @@ def surface_electron_transmission(surface_2D, func_tp):
 
 
 def transmission_function1(E_paral, E_trans):
-    # k_trans = np.sqrt(2 * m_T * E_trans * ec) / h_
-    '''
-    V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
-                  0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
-                  0.06, 0.04, 0.02])
-    # V = [0.0, 0.1]
-    width = 8e-10  # m, width of barrier
-    num = len(V)
-    L = width / (num - 1)
-    '''
-    w1 = 10e-10
-    w2 = 200e-10
-    num = 40
-    L = w1 / num
-    L2 = w2 / num
-    x1 = np.arange(0, w1, L)
-    x2 = np.arange(w1, w2, L2)
-    Q = ec / 16 / pi / eps0 * (12.85 - 1) / (12.85 + 1)
-    V0 = 0.1
-    F = (V0 - E_A) / w1
-    V1 = V0 - F * x1
-    V2 = V0 - F * w1 - Q / x2
-    x = np.concatenate((x1, x2), axis=0)
-    V = np.concatenate((V1, V2), axis=0)
+    V = 0.28
+    L = 8e-10
+    E_paral = E_paral + 0j
+    E2 = E_paral + E_trans - E_trans * m_T / m_e - V
+    E3 = E_paral + E_trans - E_trans * m_T / m_e - E_A
+    k1 = np.sqrt(2 * m_T * E_paral * ec) / h_
+    k2 = np.sqrt(2 * m_e * E2 * ec) / h_
+    k3 = np.sqrt(2 * m_e * E3 * ec) / h_
+    if k1 == 0 or k2 == 0 or k3 <= 0:
+        P = np.mat([[0, 0], [0, 0]])
+    else:
+        p11 = (k1 + k2) * np.exp(-1j * k2 * L)
+        p12 = (k1 - k2) * np.exp(1j * k2 * L)
+        p21 = (k1 - k2) * np.exp(-1j * k2 * L)
+        p22 = (k1 + k2) * np.exp(1j * k2 * L)
+        P1 = np.mat([[p11, p12], [p21, p22]]) / np.sqrt(k1 * k2) / 2
+        P2 = np.mat([[k2 + k3, k2 - k3], [k2 - k3, k2 + k3]]) / \
+            np.sqrt(k2 * k3) / 2
+        P = P1 * P2
 
-    fig, ax = plt.subplots()
-    ax.plot(x, V)
-    plt.savefig('surface_barrier.pdf', format='pdf')
-    plt.show()
-
-    Tp = 1
-    E_in_par = E_paral + E_trans - E_trans * m_T / m_e
-    E_out_par = E_paral + E_trans - E_trans * m_T / m_e - E_A
-    for i in range(num - 1):
-        k1 = (np.sqrt(2 * m_T * (E_paral - V[i]).clip(0.00001) * ec) / h_)
-        if E_in_par > V[i + 1]:
-            k2 = np.sqrt(2 * m_T * (E_in_par - V[i + 1]) * ec) / h_
-            Tr = 1 / (1 + 0.25 * ((k1**2 - k2**2) / 2 / k1 / k2)**2 *
-                      np.sin(k2 * L)**2)
-        elif E_in_par < V[i + 1]:
-            k2 = np.sqrt(2 * m_T * (V[i + 1] - E_in_par) * ec) / h_
-            Tr = 1 / (1 + 0.25 * ((k1**2 + k2**2) / 2 / k1 / k2)**2 *
-                      np.sinh(k2 * L)**2)
-        elif E_in_par == V[i + 1]:
-            Tr = 1
-        Tp = Tp * Tr
-    k1 = (np.sqrt(2 * m_T * (E_in_par - V[-1]).clip(0.00001) * ec) / h_)
-    if E_out_par > 0:
-        k2 = np.sqrt(2 * m_e * (E_out_par) * ec) / h_
-        Tr = 1 / (1 + 0.25 * ((k1**2 - k2**2) / 2 / k1 / k2)**2 *
-                  np.sin(k2 * L)**2)
-    elif E_out_par < 0:
-        k2 = np.sqrt(2 * m_e * (-E_out_par) * ec) / h_
-        Tr = 1 / (1 + 0.25 * ((k1**2 + k2**2) / 2 / k1 / k2)**2 *
-                  np.sinh(k2 * L)**2)
-    elif E_in_par == 0:
-        Tr = 1
-    Tp = Tp * Tr
-    # print(Tp)
-    # Tr = np.sqrt(E_out_par / E_in_par.clip(0.0001))
-    # Tr = Tp * Tr
+    if P[0, 0] == 0:
+        Tp = 0
+    else:
+        Tp = 1 / np.abs(P[0, 0])**2
     return Tp
-
-
-# transmission_function1(1, 1)
 
 
 def transmission_function(E_paral, E_trans):
@@ -1551,7 +1515,7 @@ def transmission_probability(E_paral, E_trans):
 
 
 def plot_QE(filename, data):
-    exp_data = np.genfromtxt('GaAs_QE_experiment1.csv', delimiter=',')
+    exp_data = np.genfromtxt('GaAs_QE_experiment.csv', delimiter=',')
     exp_data[:, 0] = 1240 / exp_data[:, 0]
     fig1, ax1 = plt.subplots()
     ax1.plot(data[:, 0], data[:, 1], 'o', exp_data[:, 0], exp_data[:, 1], '.')
@@ -1583,7 +1547,7 @@ def plot_time_data(filename, time_data):
     ax1.tick_params('both', direction='in', labelsize=12)
     ln = l1 + l2 + l3 + l4 + l5
     labs = [l.get_label() for l in ln]
-    ax1.legend(ln, labs, loc='best', frameon=False, fontsize=12)
+    ax1.legend(ln, labs, loc='center', frameon=False, fontsize=12)
     fig1.tight_layout()
     plt.savefig(filename + '.pdf', format='pdf')
     plt.show()
@@ -1748,9 +1712,10 @@ def plot_surface_emission_probability(E_paral, Tp, func_tp):
 
 def plot_electron_distribution(filename, dist_2D, types):
     if types == 1:
+        print(np.min(dist_2D[:, 5]))
         fig, ax = plt.subplots()
         ax.hist(dist_2D[:, 5], bins=100, color='k')
-        # ax.set_xlim([0, 0.6])
+        # ax.set_xlim([-0.5, 0.6])
         # ax.set_ylim([0, 2000])
         ax.set_xlabel(r'Energy (eV)', fontsize=16)
         ax.set_ylabel(r'Counts (arb. units)', fontsize=16)
@@ -1791,6 +1756,8 @@ def main(opt):
             electron_transport(dist_2D, 1)
         print('surface electron ratio: ', len(surface_2D) / Ni)
         plot_electron_distribution('surface_' + str(hw_test), surface_2D, 1)
+        np.savetxt('surface_electron.csv', surface_2D,
+                   delimiter=',', fmt='%.4f')
 
         emiss_2D, surf_trap = surface_electron_transmission(
             surface_2D, func_tp)
@@ -1834,7 +1801,10 @@ def main(opt):
         plot_QE(filename, data)
         compare_data(filename, data)
     elif opt == 3:
-        # plot_electron_distribution('', electron_distribution(hw_test, 2), 2)
+        # dist_2D = electron_distribution(hw_test, 2)
+        # save_date('initial_energy_distribution.csv', dist_2D[:, 5])
+        # save_date('initial_position_distribution.csv', dist_2D[:, 9])
+        # plot_electron_distribution('', dist_2D, 1)
         # plot_scattering_rate(1)
         plot_surface_emission_probability(E_paral, Trans_prob, func_tp)
     else:
@@ -1844,4 +1814,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(3)
+    main(1)
