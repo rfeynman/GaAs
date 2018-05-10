@@ -110,7 +110,7 @@ phonon_X_X = 0.0299
 def surface_reflection(hw):
     data = np.genfromtxt('GaAs_optical_constant.txt', delimiter=',')
     func = interp1d(data[:, 0], data[:, 2])
-    '''
+    
     fig, ax = plt.subplots()
     ax.plot(data[:, 0], data[:, 2])
     ax.set_xlabel('Photon energy (eV)', fontsize=16)
@@ -122,13 +122,26 @@ def surface_reflection(hw):
     plt.tight_layout()
     plt.savefig('surface_reflectivity.pdf', format='pdf')
     plt.show()
-    '''
+    
     return func(hw)
 
 
 def transportation_efficiency(hw):
     data = np.genfromtxt('GaAs_transportation_efficiency.csv', delimiter=',')
     func = interp1d(data[:, 0], 0.01 * data[:, 1])
+    
+    fig, ax = plt.subplots()
+    ax.plot(data[:, 0], data[:, 2])
+    ax.set_xlabel('Photon energy (eV)', fontsize=16)
+    ax.set_ylabel('GaAs_transportation_efficiency', fontsize=16)
+    ax.set_xlim([0.6, 5])
+    ax.set_xticks(np.arange(0.6, 5, 0.5))
+    ax.set_ylim([1.5, 100])
+    ax.tick_params('both', direction='in', labelsize=14)
+    plt.tight_layout()
+    plt.savefig('GaAs_transportation_efficiency.pdf', format='pdf')
+    plt.show()
+    
     return func(hw)
 
 
