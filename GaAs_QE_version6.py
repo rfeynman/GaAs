@@ -60,12 +60,12 @@ func0 = interp1d(EB_data[:, 0] * 1e6, EB_data[:, 1])
 # E_B = func0(N_A)
 W_B = np.sqrt(2 * eps * E_B / ec / N_A) * 10**9  # nm
 # print(Eg, E_B, W_B, DEg, E_T)
-E_A = 0.01  # eV, electron affinity
+E_A = 0.00  # eV, electron affinity
 thick = 1e4  # nm, thickness of GaAs active layer
 surface = 0  # position of electron emission, z = 0
 
 # ----Define simulation time, time step and total photon number----
-total_time = 200e-12  # s
+total_time = 500e-12  # s
 step_time = 1e-14  # s
 Ni = 100000  # incident photon number
 
@@ -310,7 +310,7 @@ def electron_hole_scattering(energy, types):
     '''
     energy = energy.clip(0.0001)
     E0 = energy
-    n_h = 0.05 * N_A  # m**-3, hole concentration
+    n_h = 0.5 * N_A  # m**-3, hole concentration
     T_h = T  # K, hole temperature
     beta2 = n_h * ec**2 / eps / kB / T_h
     if types == 1:
@@ -686,8 +686,8 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         theta = np.arccos((1 + xi_ab - (1 + 2 * xi_ab)**r) / xi_ab) * \
             P_ab_ind + \
             np.arccos((1 + xi_em - (1 + 2 * xi_em)**r) / xi_em) * P_em_ind
-        dist[:, 6] = dist[:, 6] * (~happen) + np.sqrt(
-            2 * np.abs(dist[:, 5]) * ec / m_T) * 10**9 * happen
+        dist[:, 6] = np.sqrt(
+            2 * np.abs(dist[:, 5]) * ec / m_T) * 10**9
     elif types == 2:
         gamma_E = Ei * (1 + alpha_L * Ei)
         gamma_Ep_ab = Ep_ab * (1 + alpha_L * Ep_ab)
@@ -699,8 +699,8 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         theta = np.arccos((1 + xi_ab - (1 + 2 * xi_ab)**r) / xi_ab) * \
             P_ab_ind + \
             np.arccos((1 + xi_em - (1 + 2 * xi_em)**r) / xi_em) * P_em_ind
-        dist[:, 6] = dist[:, 6] * (~happen) + np.sqrt(
-            2 * np.abs(dist[:, 5]) * ec / m_L) * 10**9 * happen
+        dist[:, 6] = np.sqrt(
+            2 * np.abs(dist[:, 5]) * ec / m_L) * 10**9
     elif types == 3:
         gamma_E = Ei * (1 + alpha_X * Ei)
         gamma_Ep_ab = Ep_ab * (1 + alpha_X * Ep_ab)
@@ -712,11 +712,15 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         theta = np.arccos((1 + xi_ab - (1 + 2 * xi_ab)**r) / xi_ab) * \
             P_ab_ind + \
             np.arccos((1 + xi_em - (1 + 2 * xi_em)**r) / xi_em) * P_em_ind
-        dist[:, 6] = dist[:, 6] * (~happen) + np.sqrt(
-            2 * np.abs(dist[:, 5]) * ec / m_X) * 10**9 * happen
+        dist[:, 6] = np.sqrt(
+            2 * np.abs(dist[:, 5]) * ec / m_X) * 10**9
     else:
         print('wrong valley type: 1-Gamma, 2-L, 3-X')
         theta = np.zeros(Num)
+
+    dist[:, 2] = dist[:, 6] * np.sin(theta0) * np.cos(phi0)
+    dist[:, 3] = dist[:, 6] * np.sin(theta0) * np.sin(phi0)
+    dist[:, 4] = dist[:, 6] * np.cos(theta0)
 
     v_xp = dist[:, 6] * np.sin(theta) * np.cos(phi) * happen +\
         dist[:, 2] * (~happen)
@@ -734,12 +738,14 @@ def electron_polar_transfer_energy(dist, Rate_ab, Rate_em, stept, types):
         (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
 
     zero_v_ind = dist[:, 6] == 0
-    dist[zero_v_ind, 6] = 1
-    vz_v = np.clip((dist[:, 4] / dist[:, 6]), -1, 1)
+    v = dist[:, 6]
+    v[zero_v_ind] = 1e20
+    vz_v = np.clip((dist[:, 4] / v), -1, 1)
     theta1 = np.arccos(vz_v)
     zero_theta_ind = np.sin(theta1) == 0
-    theta1[zero_theta_ind] = pi / 2
-    vx_vxy = np.clip((dist[:, 2] / dist[:, 6] / np.sin(theta1)), -1, 1)
+    temp = theta1
+    temp[zero_theta_ind] = pi / 2
+    vx_vxy = np.clip((dist[:, 2] / dist[:, 6] / np.sin(temp)), -1, 1)
     phi1 = np.arccos(vx_vxy)
     dist[:, 0] = phi1 * happen + dist[:, 0] * (~happen)
     dist[:, 1] = theta1 * happen + dist[:, 1] * (~happen)
@@ -799,22 +805,26 @@ def renew_coulomb_distribution(dist_2D, happen, types):
         gamma_E = energy * (1 + alpha_T * energy)
         b = 8 * m_T * gamma_E * ec / h_**2 / beta2
         theta = np.arccos(1 - 2 * r / (1 + b * (1 - r))) * happen
-        dist_2D[:, 6] = dist_2D[:, 6] * (~happen) + np.sqrt(
-            2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9 * happen
+        dist_2D[:, 6] = np.sqrt(
+            2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9
     elif types == 2:
         gamma_E = energy * (1 + alpha_L * energy)
         b = 8 * m_L * gamma_E * ec / h_**2 / beta2
         theta = np.arccos(1 - 2 * r / (1 + b * (1 - r))) * happen
-        dist_2D[:, 6] = dist_2D[:, 6] * (~happen) + np.sqrt(
-            2 * np.abs(dist_2D[:, 5]) * ec / m_L) * 10**9 * happen
+        dist_2D[:, 6] = np.sqrt(
+            2 * np.abs(dist_2D[:, 5]) * ec / m_L) * 10**9
     elif types == 3:
         gamma_E = energy * (1 + alpha_X * energy)
         b = 8 * m_X * gamma_E * ec / h_**2 / beta2
         theta = np.arccos(1 - 2 * r / (1 + b * (1 - r))) * happen
-        dist_2D[:, 6] = dist_2D[:, 6] * (~happen) + np.sqrt(
-            2 * np.abs(dist_2D[:, 5]) * ec / m_X) * 10**9 * happen
+        dist_2D[:, 6] = np.sqrt(
+            2 * np.abs(dist_2D[:, 5]) * ec / m_X) * 10**9
     else:
         print('Wrong renew distribution type for coulomb scattering')
+
+    dist_2D[:, 2] = dist_2D[:, 6] * np.sin(theta0) * np.cos(phi0)
+    dist_2D[:, 3] = dist_2D[:, 6] * np.sin(theta0) * np.sin(phi0)
+    dist_2D[:, 4] = dist_2D[:, 6] * np.cos(theta0)
 
     v_xp = dist_2D[:, 6] * np.sin(theta) * np.cos(phi) * happen +\
         dist_2D[:, 2] * (~happen)
@@ -832,12 +842,14 @@ def renew_coulomb_distribution(dist_2D, happen, types):
         (-v_xp * np.sin(theta0) + v_zp * np.cos(theta0)) * happen
 
     zero_v_ind = dist_2D[:, 6] == 0
-    dist_2D[zero_v_ind, 6] = 0.0001
-    vz_v = np.clip((dist_2D[:, 4] / dist_2D[:, 6]), -1, 1)
+    v = dist_2D[:, 6]
+    v[zero_v_ind] = 1e20
+    vz_v = np.clip((dist_2D[:, 4] / v), -1, 1)
     theta1 = np.arccos(vz_v)
     zero_theta_ind = np.sin(theta1) == 0
-    theta1[zero_theta_ind] = pi / 2
-    vx_vxy = np.clip((dist_2D[:, 2] / dist_2D[:, 6] / np.sin(theta1)), -1, 1)
+    temp = theta1
+    temp[zero_theta_ind] = pi / 2
+    vx_vxy = np.clip((dist_2D[:, 2] / dist_2D[:, 6] / np.sin(temp)), -1, 1)
     phi1 = np.arccos(vx_vxy)
     dist_2D[:, 0] = phi1 * happen + dist_2D[:, 0] * (~happen)
     dist_2D[:, 1] = theta1 * happen + dist_2D[:, 1] * (~happen)
@@ -856,19 +868,23 @@ def renew_distribution(dist_2D, happen, types):
     Num = len(dist_2D)
     energy_ind = dist_2D[:, 5] > 0
     happen = happen * energy_ind
+    phi0 = dist_2D[:, 0]
+    theta0 = dist_2D[:, 1]
     phi = two_pi * np.random.uniform(0, 1, Num)
     theta = np.arccos(1 - 2 * np.random.uniform(0, 1, Num))
     if types == 1:
-        dist_2D[:, 6] = dist_2D[:, 6] * (~happen) + happen * \
-            np.sqrt(2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9
+        dist_2D[:, 6] = np.sqrt(2 * np.abs(dist_2D[:, 5]) * ec / m_T) * 10**9
     elif types == 2:
-        dist_2D[:, 6] = dist_2D[:, 6] * (~happen) + happen * \
-            np.sqrt(2 * np.abs(dist_2D[:, 5]) * ec / m_L) * 10**9
+        dist_2D[:, 6] = np.sqrt(2 * np.abs(dist_2D[:, 5]) * ec / m_L) * 10**9
     elif types == 3:
-        dist_2D[:, 6] = dist_2D[:, 6] * (~happen) + happen * \
-            np.sqrt(2 * np.abs(dist_2D[:, 5]) * ec / m_X) * 10**9
+        dist_2D[:, 6] = np.sqrt(2 * np.abs(dist_2D[:, 5]) * ec / m_X) * 10**9
     else:
         print('Wrong renew distribution type for isotropic scattering')
+
+    dist_2D[:, 2] = dist_2D[:, 6] * np.sin(theta0) * np.cos(phi0)
+    dist_2D[:, 3] = dist_2D[:, 6] * np.sin(theta0) * np.sin(phi0)
+    dist_2D[:, 4] = dist_2D[:, 6] * np.cos(theta0)
+
     dist_2D[:, 2] = dist_2D[:, 6] * np.sin(theta) * np.cos(phi) * happen +\
         dist_2D[:, 2] * (~happen)
     dist_2D[:, 3] = dist_2D[:, 6] * np.sin(theta) * np.sin(phi) * happen +\
@@ -880,7 +896,7 @@ def renew_distribution(dist_2D, happen, types):
     return dist_2D
 
 
-def electron_transport(distribution_2D, types):
+def electron_transport_emission(distribution_2D, types, func_tp):
     '''electron transport in the conduction banc (CB) and suffer scattering:
     1. e-phonon (e-p) scattering:
         gain or loss the energy of a phonon (ep) after each scattering
@@ -893,7 +909,7 @@ def electron_transport(distribution_2D, types):
         non-charged scattering can be ignored
         charged scattering is considered here
     '''
-    surface_2D = []
+    emiss_2D = []
     trap_2D = []
     back_2D = []
     time_data = []
@@ -913,6 +929,7 @@ def electron_transport(distribution_2D, types):
         dist_XtoT = []
         dist_XtoL = []
         t = 0
+        k = 0
         time_data.append([t * 10**12, np.mean(dist_2D[:, 5]) * 10**3,
                           0, len(dist_2D), 0, 0])
         while t < total_time:
@@ -1264,7 +1281,15 @@ def electron_transport(distribution_2D, types):
                 bd, fd, td, dist_2D = filter(dist_2D)
                 back_2D.extend(bd.tolist())
                 trap_2D.extend(td.tolist())
-                surface_2D.extend(fd.tolist())
+                if len(fd) > 0:
+                    out_2D, reflec_2D = surface_electron_transmission(
+                        fd, func_tp, 1)
+                else:
+                    out_2D = np.array([])
+                    reflec_2D = np.array([])
+                if len(reflec_2D) > 0:
+                    dist_2D = np.concatenate((dist_2D, reflec_2D), axis=0)
+                emiss_2D.extend(out_2D.tolist())
 
             # -------- filtting electrons in L valley --------
             if len(dist_L) > 0:
@@ -1272,7 +1297,15 @@ def electron_transport(distribution_2D, types):
                 bd, fd, td, dist_L = filter(dist_L)
                 back_2D.extend(bd.tolist())
                 trap_2D.extend(td.tolist())
-                surface_2D.extend(fd.tolist())
+                if len(fd) > 0:
+                    out_2D, reflec_2D = surface_electron_transmission(
+                        fd, func_tp, 2)
+                else:
+                    out_2D = np.array([])
+                    reflec_2D = np.array([])
+                if len(reflec_2D) > 0:
+                    dist_L = np.concatenate((dist_L, reflec_2D), axis=0)
+                emiss_2D.extend(out_2D.tolist())
                 if len(dist_L) > 0:
                     energy_L = dist_L[:, 5]
                 else:
@@ -1286,7 +1319,15 @@ def electron_transport(distribution_2D, types):
                 bd, fd, td, dist_X = filter(dist_X)
                 back_2D.extend(bd.tolist())
                 trap_2D.extend(td.tolist())
-                surface_2D.extend(fd.tolist())
+                if len(fd) > 0:
+                    out_2D, reflec_2D = surface_electron_transmission(
+                        fd, func_tp, 3)
+                else:
+                    out_2D = np.array([])
+                    reflec_2D = np.array([])
+                if len(reflec_2D) > 0:
+                    dist_X = np.concatenate((dist_X, reflec_2D), axis=0)
+                emiss_2D.extend(out_2D.tolist())
                 if len(dist_X) > 0:
                     energy_X = dist_X[:, 5]
                 else:
@@ -1297,12 +1338,14 @@ def electron_transport(distribution_2D, types):
             total_energy = np.concatenate(
                 (dist_2D[:, 5], energy_L, energy_X), axis=0)
             time_data.append([t * 10**12, np.mean(total_energy) * 10**3,
-                              len(surface_2D), len(dist_2D), len(dist_L),
+                              len(emiss_2D), len(dist_2D), len(dist_L),
                               len(dist_X)])
-            # print('time:', t * 1e12, 'surface:', len(surface_2D),
-            #      'trap:', len(trap_2D), 'back:', len(back_2D),
-            #      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)),
-            #      'vz:', np.mean(dist_2D[:, 4]))
+            if (t * 1e12) > k:
+                print('time:', t * 1e12, 'emission:', len(emiss_2D),
+                      'trap:', len(trap_2D), 'back:', len(back_2D),
+                      'inside:', (len(dist_2D) + len(dist_L) + len(dist_X)),
+                      'energy:', np.mean(total_energy))
+                k += 100
             if (len(dist_2D)) <= 10:
                 break
         '''
@@ -1313,7 +1356,7 @@ def electron_transport(distribution_2D, types):
         dist_2D = dist_2D.tolist()
         dist_2D.extend(back_2D)
         dist_2D.extend(trap_2D)
-        dist_2D.extend(surface_2D)
+        dist_2D.extend(emiss_2D)
         dist_2D = np.array(dist_2D)
         dist_2D[:, 5] = np.maximum(dist_2D[:, 5], 0)
         dist_2D[:, 9] = np.clip(dist_2D[:, 9], surface, thick)
@@ -1331,14 +1374,14 @@ def electron_transport(distribution_2D, types):
     if len(trap_2D) != 0:
         trap_2D[:, 5] = 0
 
-    surface_2D = np.array(surface_2D)
-    if len(surface_2D) != 0:
-        surface_2D[:, 9] = surface
+    emiss_2D = np.array(emiss_2D)
+    if len(emiss_2D) != 0:
+        emiss_2D[:, 9] = surface
     '''
     fig, ax = plt.subplots()
     ax.hist(surface_2D[:, 5], bins=100)
     plt.show()'''
-    return surface_2D, back_2D, trap_2D, dist_2D, time_data
+    return emiss_2D, back_2D, trap_2D, dist_2D, time_data
 
 
 def filter(dist_2D):
@@ -1359,10 +1402,8 @@ def filter(dist_2D):
     return back_dist, front_dist, trap_dist, rest_dist
 
 
-def surface_electron_transmission(surface_2D, func_tp):
-    surface_trap = []
+def surface_electron_transmission(surface_2D, func_tp, types):
     P_tp = []
-    # surface_2D[:, 5] = surface_2D[:, 5] + E_B
     Num = len(surface_2D)
     theta = surface_2D[:, 1]
     E_trans = np.abs(surface_2D[:, 5] * np.sin(theta)**2)
@@ -1377,14 +1418,32 @@ def surface_electron_transmission(surface_2D, func_tp):
     P_tp = np.array(P_tp)
     # print(P_tp)
     match_ind = np.random.uniform(0, 1.0, len(surface_2D)) <= P_tp
-    surface_trap.extend(surface_2D[(~match_ind), :].tolist())
-    emission_2D = surface_2D[match_ind, :]
-    surface_trap = np.array(surface_trap)
+    if types == 1:
+        E_trans_out = E_trans * m_T / m_e
+    elif types == 2:
+        E_trans_out = E_trans * m_L / m_e
+    elif types == 3:
+        E_trans_out = E_trans * m_X / m_e
+    else:
+        print('wrong surface transmission type')
+    energy_ind = surface_2D[:, 5] - E_A - E_B - E_trans_out > 0
+    emission_2D = surface_2D[(match_ind * energy_ind), :]
+    if len(emission_2D) > 0:
+        emission_2D[:, 5] = emission_2D[:, 5] - E_A - E_B
+        emission_trans = E_trans_out[(match_ind * energy_ind)]
+        emission_paral = emission_2D[:, 5] - emission_trans
+        emission_2D[:, 4] = np.sqrt(2 * emission_paral * ec / m_e) * 1e9
+        emission_2D[:, 6] = np.sqrt(2 * emission_2D[:, 5] * ec / m_e) * 1e9
+        emission_2D[:, 1] = np.arccos(emission_2D[:, 4] / emission_2D[:, 6])
+        # print('Ta:', np.mean(emission_trans), 'Lo', np.mean(emission_paral))
+    reflec_2D = surface_2D[~(match_ind * energy_ind), :]
+    if len(reflec_2D) > 0:
+        reflec_2D[:, 9] = surface
+        reflec_2D[:, 4] = np.abs(reflec_2D[:, 4])
+    return emission_2D, reflec_2D
 
-    return emission_2D, surface_trap
 
-
-def transmission_function1(E_paral, E_trans):
+def transmission_function(E_paral, E_trans):
     V = 0.28
     L = 8e-10
     E_paral = E_paral + 0j
@@ -1412,8 +1471,8 @@ def transmission_function1(E_paral, E_trans):
     return Tp
 
 
-def transmission_function(E_paral, E_trans):
-
+def transmission_function1(E_paral, E_trans):
+    '''
     V = np.array([0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.205, 0.225, 0.25,
                   0.235, 0.218, 0.20, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08,
                   0.06, 0.04, 0.02])
@@ -1424,28 +1483,13 @@ def transmission_function(E_paral, E_trans):
     L = width / num
     '''
     width = 1.5e-10
-    num = 40
+    num = 50
     L = width / num
     x = np.arange(0, width, L) + L
-    Q = 0.36 * (12.85 - 1) / (12.85 + 1)
-    F = (4 - E_A) / width
-    V = 0.3 - F * x'''
-    '''
-    w1 = 10e-10
-    w2 = 200e-10
-    num = 40
-    L = w1 / num
-    L2 = w2 / num
-    x1 = np.arange(0, w1, L)
-    x2 = np.arange(w1, w2, L2)
-    Q = ec / 16 / pi / eps0 * (12.85 - 1) / (12.85 + 1)
-    V0 = 1
-    F = (V0 - E_A) / w1
-    V1 = V0 - F * x1
-    V2 = V0 - F * w1 - Q / x2
-    x = np.concatenate((x1, x2), axis=0)
-    V = np.concatenate((V1, V2), axis=0)
-    '''
+    V0 = 4.0
+    F = (V0 - E_A - E_B) / width
+    V = V0 - F * x
+
     Tp = np.mat([[1, 0], [0, 1]])
     E_in_par = E_paral + 0j
     E_out_par = E_paral + E_trans - E_trans * m_T / m_e + 0j
@@ -1460,13 +1504,13 @@ def transmission_function(E_paral, E_trans):
         p21 = 0.5 * (1 - m_T * k_out / k_in / m_e)  # * np.exp(-1j * k_in * L)
         p22 = 0.5 * (1 + m_T * k_out / k_in / m_e)  # * np.exp(-1j * k_in * L)
         P = np.mat([[p11, p12], [p21, p22]])
+        # P = m_T / m_e * np.abs(k_out / k_in)
     Tp = Tp * P'''
-    # Tp = Tp * m_T  / m_e * np.abs(k_out / k_in)
     for k in range(num - 2):
         i = k + 1
         k1 = (np.sqrt(2 * m_e * (E_out_par - V[i] + 0j) * ec) / h_)
         k2 = (np.sqrt(2 * m_e * (E_out_par - V[i + 1] + 0j) * ec) / h_)
-        if k1 == 0:
+        if k1 <= 0 or k2 <= 0:
             P = 0
         else:
             p11 = 0.5 * (1 + k2 / k1) * np.exp(-1j * k1 * L)
@@ -1480,7 +1524,7 @@ def transmission_function(E_paral, E_trans):
 
     k_in = (np.sqrt(2 * m_e * (E_out_par - V[-1] + 0j) * ec) / h_)
     k_out = (np.sqrt(2 * m_e * (E_out_par - E_A + 0j) * ec) / h_)
-    if k_in == 0:
+    if k_in <= 0 or np.real(k_out) <= 0:
         P = 0
     else:
         p11 = 0.5 * (1 + k_out / k_in) * np.exp(1j * k_in * L)
@@ -1519,9 +1563,9 @@ def plot_QE(filename, data):
     exp_data[:, 0] = 1240 / exp_data[:, 0]
     fig1, ax1 = plt.subplots()
     ax1.plot(data[:, 0], data[:, 1], 'o', exp_data[:, 0], exp_data[:, 1], '.')
-    ax1.set_xlabel(r'Photon energy (eV)', fontsize=14)
-    ax1.set_ylabel(r'QE (%)', fontsize=14)
-    ax1.tick_params('both', direction='in', labelsize=12)
+    ax1.set_xlabel(r'Photon energy (eV)', fontsize=16)
+    ax1.set_ylabel(r'QE (%)', fontsize=16)
+    ax1.tick_params('both', direction='in', labelsize=14)
     ax1.legend(['Simulated', 'Experimental'])
     plt.savefig(filename + '.pdf', format='pdf')
     plt.show()
@@ -1532,22 +1576,22 @@ def plot_time_data(filename, time_data):
     fig1, ax1 = plt.subplots()
     l1 = ax1.plot(time_data[:, 0], time_data[:, 1],
                   'bp', label='Electron energy')
-    ax1.set_xlabel('Time (ps)', fontsize=14)
-    ax1.set_ylabel('Energy (meV)', fontsize=14, color='b')
+    ax1.set_xlabel('Time (ps)', fontsize=16)
+    ax1.set_ylabel('Energy (meV)', fontsize=16, color='b')
     ax1.tick_params('y', color='b')
-    ax1.tick_params('both', direction='in', labelsize=12)
+    ax1.tick_params('both', direction='in', labelsize=14)
 
     ax2 = ax1.twinx()
-    l2 = ax2.semilogy(time_data[:, 0], time_data[:, 2], 'r*', label='Surface')
+    l2 = ax2.semilogy(time_data[:, 0], time_data[:, 2], 'r*', label='Emission')
     l3 = ax2.semilogy(time_data[:, 0], time_data[:, 3], 'c.', label='Gamma')
     l4 = ax2.semilogy(time_data[:, 0], time_data[:, 4], 'ys', label='L')
     l5 = ax2.semilogy(time_data[:, 0], time_data[:, 5], 'mo', label='X')
-    ax2.set_ylabel('Counts (abs. units)', fontsize=14)
+    ax2.set_ylabel('Counts (abs. units)', fontsize=16)
     ax2.tick_params('y', color='r')
-    ax1.tick_params('both', direction='in', labelsize=12)
+    ax1.tick_params('both', direction='in', labelsize=14)
     ln = l1 + l2 + l3 + l4 + l5
     labs = [l.get_label() for l in ln]
-    ax1.legend(ln, labs, loc='center', frameon=False, fontsize=12)
+    ax1.legend(ln, labs, loc='center', frameon=False, fontsize=14)
     fig1.tight_layout()
     plt.savefig(filename + '.pdf', format='pdf')
     plt.show()
@@ -1687,9 +1731,9 @@ def compare_data(filename, data):
     fig1, ax1 = plt.subplots()
     ax1.plot(data[:, 0], data[:, 3], 'o', data[:, 0],
              transportation_efficiency(data[:, 0]), '.')
-    ax1.set_xlabel(r'Photon energy (eV)', fontsize=14)
-    ax1.set_ylabel(r'transportation efficiency (%)', fontsize=14)
-    ax1.tick_params('both', direction='in', labelsize=12)
+    ax1.set_xlabel(r'Photon energy (eV)', fontsize=16)
+    ax1.set_ylabel(r'transportation efficiency (%)', fontsize=16)
+    ax1.tick_params('both', direction='in', labelsize=14)
     ax1.legend(['Simulated', 'Calculated'])
     plt.savefig(filename + '_TE.pdf', format='pdf')
     plt.show()
@@ -1701,18 +1745,23 @@ def plot_surface_emission_probability(E_paral, Tp, func_tp):
         P1.append((func_tp(E_paral[i], 0.0)[0]).tolist())
     P1 = np.array(P1)
     fig, ax = plt.subplots()
-    ax.plot(E_paral, Tp[0, :], E_paral, Tp[10, :], E_paral, Tp[20, :])
-    ax.set_xlabel(r'Electron longitudinal energy (eV)', fontsize=14)
-    ax.set_ylabel(r'Emission probability', fontsize=14)
-    ax.tick_params('both', direction='in', labelsize=12)
-    ax.legend(['0', '0.2', '0.4'])
-    plt.savefig('Emission_rate.pdf', format='pdf')
+    ax.plot(E_paral, Tp[0, :], 'k-',
+            E_paral, Tp[15, :], 'b--',
+            E_paral, Tp[30, :], 'r-.')
+    ax.set_xlabel(r'Longitudinal kinetic energy, $E_{//}$ (eV)', fontsize=16)
+    ax.set_ylabel(r'Transmission coefficient', fontsize=16)
+    ax.tick_params('both', direction='in', labelsize=14)
+    ax.legend(
+        [r'$E_{\perp}=0$ eV', r'$E_{\perp}=0.3$ eV', r'$E_\perp=0.6$ eV'],
+        frameon=False, fontsize=14)
+    plt.tight_layout()
+    plt.savefig('Transmission_coefficient.pdf', format='pdf')
     plt.show()
 
 
 def plot_electron_distribution(filename, dist_2D, types):
     if types == 1:
-        print(np.min(dist_2D[:, 5]))
+        print(np.max(dist_2D[:, 5]))
         fig, ax = plt.subplots()
         ax.hist(dist_2D[:, 5], bins=100, color='k')
         # ax.set_xlim([-0.5, 0.6])
@@ -1733,6 +1782,16 @@ def plot_electron_distribution(filename, dist_2D, types):
         plt.tight_layout()
         plt.savefig(filename + 'posization_distribution.pdf', format='pdf')
         plt.show()
+    elif types == 3:
+        angle = dist_2D[:, 1] / pi * 180
+        fig, ax = plt.subplots()
+        ax.hist(angle, bins=200, color='k')
+        ax.set_xlabel(r'Angle ($^\circ$)', fontsize=16)
+        ax.set_ylabel(r'Counts (arb. units', fontsize=16)
+        ax.tick_params('both', direction='in', labelsize=14)
+        plt.tight_layout()
+        plt.savefig(filename + 'angular_distribution.pdf', format='pdf')
+        plt.show()
     else:
         print('Wrong types')
 
@@ -1741,7 +1800,7 @@ def main(opt):
     hw_start = Eg + 0.01  # eV
     hw_end = 2.5  # eV
     hw_step = 0.05  # eV
-    hw_test = 2.0  # eV
+    hw_test = 1.5  # eV
     data = []
     E_paral = np.linspace(0.0, 2.0, 100)
     E_trans = np.linspace(0.0, 2.0, 100)
@@ -1752,25 +1811,18 @@ def main(opt):
         print('excited electron ratio: ', len(dist_2D) / Ni)
         # plot_electron_distribution('initial', dist_2D, 1)
 
-        surface_2D, back_2D, trap_2D, dist_2D, time_data = \
-            electron_transport(dist_2D, 1)
-        print('surface electron ratio: ', len(surface_2D) / Ni)
-        plot_electron_distribution('surface_' + str(hw_test), surface_2D, 1)
-        np.savetxt('surface_electron.csv', surface_2D,
-                   delimiter=',', fmt='%.4f')
+        emiss_2D, back_2D, trap_2D, dist_2D, time_data = \
+            electron_transport_emission(dist_2D, 1, func_tp)
 
-        emiss_2D, surf_trap = surface_electron_transmission(
-            surface_2D, func_tp)
-        print('emission ratio:', len(emiss_2D) / len(surface_2D))
+        # emiss_2D, surf_trap = surface_electron_transmission(
+        #    surface_2D, func_tp)
+        # print('emission ratio:', len(emiss_2D) / len(surface_2D))
         print('QE (%): ', 100.0 * len(emiss_2D) /
               Ni * (1 - surface_reflection(hw_test)))
-        '''
-        emiss_2D, surf_trap = electron_emitting(surface_2D)
-        print('emission ratio:', len(emiss_2D) / len(surface_2D))
-        print('QE (%): ', 100.0 * len(emiss_2D) /
-              Ni * (1 - surface_reflection(hw_test)))
-        '''
+
+        emiss_2D[:, 5] = emiss_2D[:, 5] + E_A
         plot_electron_distribution('emission_' + str(hw_test), emiss_2D, 1)
+        plot_electron_distribution('emission_' + str(hw_test), emiss_2D, 3)
         filename = 'time_evoluation_' + str(hw_test)
         plot_time_data(filename, time_data)
 
@@ -1779,21 +1831,21 @@ def main(opt):
             dist_2D = electron_distribution(hw, 2)
             print('excited electron ratio: ', len(dist_2D) / Ni)
 
-            surface_2D, back_2D, trap_2D, dist_2D, energy_time = \
-                electron_transport(dist_2D, 1)
-            print('surface electron ratio: ', len(surface_2D) / Ni)
+            emiss_2D, back_2D, trap_2D, dist_2D, energy_time = \
+                electron_transport_emission(dist_2D, 1, func_tp)
+            # print('surface electron ratio: ', len(surface_2D) / Ni)
 
             # emiss_2D, surf_trap = electron_emitting(surface_2D)
-            emiss_2D, surf_trap = surface_electron_transmission(
-                surface_2D, func_tp)
+            # emiss_2D, surf_trap = surface_electron_transmission(
+            #    surface_2D, func_tp)
 
             SR = surface_reflection(hw)  # surface light reflection
-            TE = len(surface_2D) / len(dist_2D)  # transportation efficiency
-            SE = len(surface_2D) / Ni * (1 - SR)
-            ER = len(emiss_2D) / len(surface_2D)  # surface emission rate
+            # TE = len(surface_2D) / len(dist_2D)  # transportation efficiency
+            # SE = len(surface_2D) / Ni * (1 - SR)
+            # ER = len(emiss_2D) / len(surface_2D)  # surface emission rate
             QE = 100.0 * len(emiss_2D) / Ni * (1 - SR)
             print('photon energy (eV): ', hw, ', QE (%): ', QE)
-            data.append([hw, QE, SR, TE, SE, ER])
+            data.append([hw, QE, SR])
 
         filename = 'QE_' + str(thick) + '_' + str(E_A)
         data = np.array(data)
@@ -1814,4 +1866,4 @@ def main(opt):
 
 
 if __name__ == '__main__':
-    main(1)
+    main(2)
